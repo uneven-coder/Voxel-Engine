@@ -13,17 +13,23 @@ public class World : MonoBehaviour
 
     public Material VoxelMaterial;
 
+
+    // noise
+    public int noiseSeed = 1234;
+    public float maxHeight = 0.2f;
+    public float noiseScale = 0.015f;
+    public float[,] noiseArray;
+
+
     void Awake()
     {
         if (Instance == null)
-        {
             Instance = this;
-            // DontDestroyOnLoad(gameObject);
-        }
+        // DontDestroyOnLoad(gameObject);
         else
-        {
             Destroy(gameObject);
-        }
+
+        noiseArray = GlobalNoise.GetNoise();
     }
 
     void Start()
@@ -53,19 +59,20 @@ public class World : MonoBehaviour
                 chunks[chunkPosition] = chunk;
             }
         }
-    }
-
-    public Voxel.VoxelType DetermineVoxelType(float x, float y, float z)
+    }    public Voxel.VoxelType DetermineVoxelType(float x, float y, float z)
     {
-        float noiseValue = SimplexNoise.Generate(x * 0.1f, y * 0.1f, z * 0.1f);
-        float AirThreshold = 0f;
+        float noiseValue = GlobalNoise.GetGlobalNoiseValue(x, z, World.Instance.noiseArray);
 
-        //Debug.Log(noiseValue);
+        // Normalize noise value to [0, 1]
+        float normalizedNoiseValue = (noiseValue + 1) / 2;
 
-        if (noiseValue > AirThreshold)
-            return Voxel.VoxelType.Grass; // Solid voxel
+        // Calculate terrain height based on noise
+        float terrainHeight = normalizedNoiseValue * World.Instance.maxHeight * chunkSize;
+
+        if (y <= terrainHeight)
+            return Voxel.VoxelType.Grass; // Solid voxel below terrain
         else
-            return Voxel.VoxelType.Air; // Air voxel
+            return Voxel.VoxelType.Air; // Air voxel above terrain
     }
 
     public Chunk GetChunk(Vector3 globalPosition)

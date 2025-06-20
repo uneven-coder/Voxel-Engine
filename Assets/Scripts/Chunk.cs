@@ -98,14 +98,31 @@ public class Chunk : MonoBehaviour
             int y = (i / chunkSize) % chunkSize;
             int z = i / (chunkSize * chunkSize);
 
-            // var randomColor = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f), 0.6f);
-            // var pastelColor = Color.Lerp(randomColor, Color.white, 0.5f);
-
-            // world pos accounts for position of the chunk in the world
+            // Calculate world position for terrain generation
             Vector3 worldPos = transform.position + new Vector3(x, y, z);
-            Voxel.VoxelType type = World.Instance.DetermineVoxelType(worldPos.x, worldPos.y, worldPos.z); // use the world position to get what type the voxel should be at that location
-            // if type is air dont make it active
-            voxels[x, y, z] = new Voxel(transform.position + new Vector3(x, y, z), Color.blue, type, type != Voxel.VoxelType.Air); 
+            
+            // Determine voxel type based on terrain generation
+            Voxel.VoxelType voxelType = World.Instance.DetermineVoxelType(worldPos.x, worldPos.y, worldPos.z);
+            
+            // Set color based on voxel type
+            Color voxelColor = Color.white;
+            bool isActive = true;
+            
+            switch (voxelType)
+            {
+                case Voxel.VoxelType.Air:
+                    voxelColor = Color.clear;
+                    isActive = false;
+                    break;
+                case Voxel.VoxelType.Grass:
+                    voxelColor = Color.green;
+                    break;
+                case Voxel.VoxelType.Stone:
+                    voxelColor = Color.gray;
+                    break;
+            }
+            
+            voxels[x, y, z] = new Voxel(new Vector3(x, y, z), voxelColor, voxelType, isActive);
         }
     }
 
