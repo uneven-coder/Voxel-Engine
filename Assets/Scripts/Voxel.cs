@@ -7,11 +7,13 @@ public struct Voxel
     public Vector3 position;
     // public Vector3 normal;
     public Color color;
+    public bool isActive;
 
-    public Voxel(Vector3 position, Color color) // Vector3 normal, 
+    public Voxel(Vector3 position, Color color, bool isActive = true) // Vector3 normal, 
     {
         this.position = position;
         // this.normal = normal;
+        this.isActive = isActive;
         this.color = color;
     }
 }
