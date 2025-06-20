@@ -100,7 +100,12 @@ public class Chunk : MonoBehaviour
 
             // var randomColor = new Color(Random.Range(0f, 1f), Random.Range(0f, 1f), Random.Range(0f, 1f), 0.6f);
             // var pastelColor = Color.Lerp(randomColor, Color.white, 0.5f);
-            voxels[x, y, z] = new Voxel(transform.position + new Vector3(x, y, z), Color.blue);
+
+            // world pos accounts for position of the chunk in the world
+            Vector3 worldPos = transform.position + new Vector3(x, y, z);
+            Voxel.VoxelType type = World.Instance.DetermineVoxelType(worldPos.x, worldPos.y, worldPos.z); // use the world position to get what type the voxel should be at that location
+            // if type is air dont make it active
+            voxels[x, y, z] = new Voxel(transform.position + new Vector3(x, y, z), Color.blue, type, type != Voxel.VoxelType.Air); 
         }
     }
 
@@ -284,25 +289,5 @@ public class Chunk : MonoBehaviour
         triangles.Add(vertCount - 4);
         triangles.Add(vertCount - 1);
         triangles.Add(vertCount - 2);
-    }
-
-
-    void OnDrawGizmos()
-    {
-        if (voxels != null)
-        {
-            int totalVoxels = chunkSize * chunkSize * chunkSize;
-
-            for (int i = 0; i < totalVoxels; i++)
-            {
-                // Convert 1D index to 3D coordinates
-                int x = i % chunkSize;
-                int y = (i / chunkSize) % chunkSize;
-                int z = i / (chunkSize * chunkSize);
-
-                Gizmos.color = voxels[x, y, z].color;
-                Gizmos.DrawCube(transform.position + new Vector3(x, y, z), Vector3.one);
-            }
-        }
     }
 }

@@ -55,6 +55,19 @@ public class World : MonoBehaviour
         }
     }
 
+    public Voxel.VoxelType DetermineVoxelType(float x, float y, float z)
+    {
+        float noiseValue = SimplexNoise.Generate(x * 0.1f, y * 0.1f, z * 0.1f);
+        float AirThreshold = 0f;
+
+        //Debug.Log(noiseValue);
+
+        if (noiseValue > AirThreshold)
+            return Voxel.VoxelType.Grass; // Solid voxel
+        else
+            return Voxel.VoxelType.Air; // Air voxel
+    }
+
     public Chunk GetChunk(Vector3 globalPosition)
     {
         Vector3 chunkPosition = new Vector3(
@@ -69,6 +82,6 @@ public class World : MonoBehaviour
         // Chunk not found
         return null;
     }
-    
-    
+
+
 }

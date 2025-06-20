@@ -9,12 +9,21 @@ public struct Voxel
     public Color color;
     public bool isActive;
 
-    public Voxel(Vector3 position, Color color, bool isActive = true) // Vector3 normal, 
+    public VoxelType type;
+    public enum VoxelType
+    {
+        Air,
+        Grass,
+        Stone
+    }
+
+    public Voxel(Vector3 position, Color color, VoxelType type, bool isActive = true) // Vector3 normal, 
     {
         this.position = position;
         // this.normal = normal;
         this.isActive = isActive;
         this.color = color;
+        this.type = type;
     }
 }
 
