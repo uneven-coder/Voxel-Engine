@@ -303,7 +303,7 @@ Transform:
   m_GameObject: {fileID: 963194225}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalPosition: {x: 0, y: 53, z: -90.7}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -321,7 +321,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b71fbc393c94f4641863fdc216b6c74b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveSpeed: 11.32
+  moveSpeed: 18.5
   turnSpeed: 60
   pitchSensitivity: 1
   yawSensitivity: 1.24
@@ -365,7 +365,7 @@ Transform:
   m_GameObject: {fileID: 973227823}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: -114.1, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -383,12 +383,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad2122aebad3c8a4485a603f475a5274, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  worldSize: {x: 110, y: 1}
+  worldSize: {x: 12, y: 3}
   chunkSize: 16
+  loadDistance: 36
   VoxelMaterial: {fileID: 2100000, guid: 4cab0bbaa182fa140a7fdf99cdce2f91, type: 2}
-  noiseSeed: 1234
-  maxHeight: 9999
-  noiseScale: -0.0015
+  noiseSeed: 42234
+  maxHeight: 1111
+  noiseScale: 0.0001
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
