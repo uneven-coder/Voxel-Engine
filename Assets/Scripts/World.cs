@@ -10,6 +10,7 @@ public class World : MonoBehaviour
 
     // Use Vector3Int for chunk keys for better hashing and performance
     private Dictionary<Vector3Int, Chunk> chunks;
+    private Dictionary<Vector3Int, Voxel[,,]> chunkVoxelData; // Store voxel data for persistence
     public static World Instance { get; private set; }
     public Material VoxelMaterial;
 
@@ -27,6 +28,7 @@ public class World : MonoBehaviour
     private Dictionary<Vector3Int, int> chunkLastVisibleFrame = new Dictionary<Vector3Int, int>();
     private const int chunkUnloadDelayFrames = 10;
     private int lastVisibleChunksFrame = -1;
+    private List<Vector3Int> chunksToUnload = new List<Vector3Int>();
 
     private void Awake()
     {   // Initialize singleton instance and calculate world positioning
@@ -42,7 +44,7 @@ public class World : MonoBehaviour
             int centerY = worldSize.y / 2;
             int centerZ = worldSize.x / 2;
             Vector3 worldPos = transform.position;
-            
+
             worldOrigin = new Vector3Int(
                 Mathf.RoundToInt(worldPos.x) - centerX * chunkSize,
                 Mathf.RoundToInt(worldPos.y) - centerY * chunkSize,
@@ -54,8 +56,54 @@ public class World : MonoBehaviour
     private void Start()
     {   // Initialize world data structures and load initial chunks
         chunks = new Dictionary<Vector3Int, Chunk>(worldSize.x * worldSize.x * worldSize.y);
+        chunkVoxelData = new Dictionary<Vector3Int, Voxel[,,]>(worldSize.x * worldSize.x * worldSize.y);
         cameraController = FindObjectOfType<CameraController>();
+        
+        GenerateInitialChunkData();
         LoadAllChunks();
+    }
+
+    private void GenerateInitialChunkData()
+    {   // Generate and store initial voxel data for all chunks
+        for (int x = 0; x < worldSize.x; x++)
+        {
+            for (int y = 0; y < worldSize.y; y++)
+            {
+                for (int z = 0; z < worldSize.x; z++)
+                {   // Create initial voxel data for each chunk coordinate
+                    Vector3Int chunkCoord = new Vector3Int(x, y, z);
+                    chunkVoxelData[chunkCoord] = GenerateChunkVoxelData(chunkCoord);
+                }
+            }
+        }
+    }
+
+    private Voxel[,,] GenerateChunkVoxelData(Vector3Int chunkCoord)
+    {   // Generate voxel data for a specific chunk with random modifications
+        Voxel[,,] voxels = new Voxel[chunkSize, chunkSize, chunkSize];
+        Vector3 chunkWorldPos = ChunkCoordToWorldPos(chunkCoord);
+        int totalVoxels = chunkSize * chunkSize * chunkSize;
+
+        // Generate base terrain data
+        for (int i = 0; i < totalVoxels; i++)
+        {   // Calculate 3D indices and create voxels
+            int x = i % chunkSize;
+            int y = (i / (chunkSize * chunkSize)) % chunkSize;
+            int z = (i / chunkSize) % chunkSize;
+
+            float wx = chunkWorldPos.x + x;
+            float wy = chunkWorldPos.y + y;
+            float wz = chunkWorldPos.z + z;
+            Voxel.VoxelType baseType = DetermineVoxelType(wx, wy, wz);
+
+            // Apply random modifications to non-air voxels
+            if (baseType != Voxel.VoxelType.Air)
+                baseType = UnityEngine.Random.Range(0, 2) == 0 ? Voxel.VoxelType.Grass : Voxel.VoxelType.Stone;
+
+            voxels[x, y, z] = VoxelTypeManager.CreateVoxel(new Vector3(x, y, z), baseType);
+        }
+
+        return voxels;
     }
 
     void FixedUpdate()
@@ -68,17 +116,22 @@ public class World : MonoBehaviour
 
         // Unload chunks that are no longer visible
         if (lastVisibleChunksFrame != Time.frameCount)
-        {   // Process chunk unloading with frame delay
+        {   // Process chunk unloading with frame delay to avoid GC allocations
             lastVisibleChunksFrame = Time.frameCount;
-            foreach (var chunkCoord in new List<Vector3Int>(chunks.Keys))
+            chunksToUnload.Clear();
+
+            foreach (var chunkCoord in chunks.Keys)
             {
-                if (!visibleChunks.Contains(chunkCoord) && 
+                if (!visibleChunks.Contains(chunkCoord) &&
                     chunkLastVisibleFrame.TryGetValue(chunkCoord, out int lastVisibleFrame) &&
                     Time.frameCount - lastVisibleFrame > chunkUnloadDelayFrames)
                 {
-                    UnloadChunk(chunkCoord);
+                    chunksToUnload.Add(chunkCoord);
                 }
             }
+
+            for (int i = 0; i < chunksToUnload.Count; i++)
+                UnloadChunk(chunksToUnload[i]);
         }
     }
 
@@ -100,7 +153,7 @@ public class World : MonoBehaviour
         }
     }
 
-    
+
     private HashSet<Vector3Int> GetActualVisibleChunks(Camera cam, Vector3Int cameraChunk, Vector3 cameraPos)
     {   // Get only visible chunks using ray-based visibility detection
         HashSet<Vector3Int> result = new HashSet<Vector3Int>();
@@ -113,7 +166,7 @@ public class World : MonoBehaviour
                     Vector3Int chunkCoord = new Vector3Int(x, y, z);
                     Vector3 chunkCenter = ChunkCoordToWorldPos(chunkCoord) + Vector3.one * (chunkSize / 2f);
                     Bounds chunkBounds = new Bounds(chunkCenter, Vector3.one * chunkSize);
-                    
+
                     if (GeometryUtility.TestPlanesAABB(cameraFrustumPlanes, chunkBounds))
                     {
                         if (IsChunkVisibleByRay(cameraPos, chunkCoord, chunkCenter))
@@ -164,11 +217,11 @@ public class World : MonoBehaviour
         foreach (var kvp in chunks)
         {
             var chunkCoord = kvp.Key;
-            if (chunkCoord == targetChunkCoord) 
+            if (chunkCoord == targetChunkCoord)
                 continue;
-                
+
             Bounds chunkBounds = new Bounds(ChunkCoordToWorldPos(chunkCoord) + Vector3.one * (chunkSize / 2f), Vector3.one * chunkSize);
-            
+
             if (chunkBounds.IntersectRay(ray, out float distance))
             {
                 if (distance < maxDistance)
@@ -185,7 +238,13 @@ public class World : MonoBehaviour
         chunkObj.transform.position = chunkWorldPos;
         chunkObj.transform.parent = transform;
         Chunk chunk = chunkObj.AddComponent<Chunk>();
-        chunk.Initialize(chunkSize);
+        
+        // Initialize chunk with pre-generated voxel data if available
+        if (chunkVoxelData.ContainsKey(chunkCoord))
+            chunk.InitializeWithVoxelData(chunkSize, chunkVoxelData[chunkCoord]);
+        else
+            chunk.Initialize(chunkSize);
+            
         chunks[chunkCoord] = chunk;
     }
 
@@ -203,21 +262,21 @@ public class World : MonoBehaviour
     private void LoadVisibleChunks()
     {   // Load chunks visible to the camera and update visibility tracking
         Camera cam = Camera.main;
-        if (cam == null) 
+        if (cam == null)
             return;
-            
+
         Vector3 cameraPos = cam.transform.position;
         Vector3Int cameraChunk = GetChunkOrigin(cameraPos) / chunkSize;
         cameraFrustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
         HashSet<Vector3Int> visibleChunkCoords = GetActualVisibleChunks(cam, cameraChunk, cameraPos);
-        
+
         foreach (var chunkCoord in visibleChunkCoords)
         {
             if (!chunks.ContainsKey(chunkCoord))
                 LoadChunk(chunkCoord);
             chunkLastVisibleFrame[chunkCoord] = Time.frameCount;
         }
-        
+
         visibleChunks = visibleChunkCoords;
         lastCameraChunk = cameraChunk;
     }

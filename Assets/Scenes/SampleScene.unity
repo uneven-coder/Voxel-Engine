@@ -892,13 +892,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentMode: 0
   orbitCenter: {fileID: 973227825}
-  orbitDistance: 64.65002
+  orbitDistance: 200
   orbitSpeed: 2
   minPitch: -80
   maxPitch: 80
   zoomSpeed: 23.1
   minZoomDistance: 3
-  maxZoomDistance: 200
+  maxZoomDistance: 400
   maxLookAroundYaw: 90
   maxLookAroundPitch: 60
   moveSpeed: 46.2
@@ -966,8 +966,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad2122aebad3c8a4485a603f475a5274, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  worldSize: {x: 6, y: 2}
-  chunkSize: 8
+  worldSize: {x: 8, y: 3}
+  chunkSize: 12
   VoxelMaterial: {fileID: 2100000, guid: 4cab0bbaa182fa140a7fdf99cdce2f91, type: 2}
   noiseSeed: 12
   maxHeight: 1111
