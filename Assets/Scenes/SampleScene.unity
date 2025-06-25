@@ -796,6 +796,7 @@ GameObject:
   - component: {fileID: 963194227}
   - component: {fileID: 963194226}
   - component: {fileID: 963194229}
+  - component: {fileID: 963194230}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -908,6 +909,32 @@ MonoBehaviour:
   toggleModeButton: {fileID: 1842461020}
   orbitInstructionsPanel: {fileID: 72509331}
   freeFlyInstructionsPanel: {fileID: 173813516}
+--- !u!114 &963194230
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 963194225}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa5d571c58b4dbf49897e759aa1dd662, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  interactionRange: 259.58
+  highlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  showHighlight: 1
+  destructionRate: 0.05
+  destructionRadius: 3
+  radiusHighlightColor: {r: 1, g: 0, b: 0, a: 1}
+  holdTimeToActivate: 0.4
+  maxRadius: 10
+  radiusGrowthTime: 0.8
+  destructionOverlayColor: {r: 1, g: 0, b: 0, a: 1}
+  preDestructionAlpha: 0.14
+  voxelsPerFrameDestruction: 22
+  useMultiThreading: 1
+  maxConcurrentTasks: 4
 --- !u!1 &973227823
 GameObject:
   m_ObjectHideFlags: 0

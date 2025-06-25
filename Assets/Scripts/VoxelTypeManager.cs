@@ -32,6 +32,41 @@ public static class VoxelTypeManager
             isActive = true,
             name = "Stone"
         };
+
+        voxelTypes[Voxel.VoxelType.Pink] = new VoxelTypeData
+        {
+            color = Color.magenta,
+            isActive = true,
+            name = "Pink"
+        };
+
+        voxelTypes[Voxel.VoxelType.Orange] = new VoxelTypeData
+        {
+            color = new Color(1f, 0.5f, 0f),
+            isActive = true,
+            name = "Orange"
+        };
+
+        voxelTypes[Voxel.VoxelType.Purple] = new VoxelTypeData
+        {
+            color = new Color(0.5f, 0f, 1f),
+            isActive = true,
+            name = "Purple"
+        };
+
+        voxelTypes[Voxel.VoxelType.Cyan] = new VoxelTypeData
+        {
+            color = Color.cyan,
+            isActive = true,
+            name = "Cyan"
+        };
+
+        voxelTypes[Voxel.VoxelType.Yellow] = new VoxelTypeData
+        {
+            color = Color.yellow,
+            isActive = true,
+            name = "Yellow"
+        };
     }
 
     public static Voxel CreateVoxel(Vector3 position, Voxel.VoxelType type)

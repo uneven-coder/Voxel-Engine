@@ -103,15 +103,22 @@ public class Chunk : MonoBehaviour
         uvs.Clear();
 
         // Group voxels by type and generate mesh data for each type
-        var voxelsByType = voxels.Cast<Voxel>()
-            .Select((voxel, index) => new
+        var activeVoxels = new List<(Voxel voxel, int x, int y, int z)>();
+        
+        for (int x = 0; x < chunkSize; x++)
+        {
+            for (int y = 0; y < chunkSize; y++)
             {
-                voxel,
-                x = index % chunkSize,
-                y = (index / chunkSize / chunkSize),
-                z = (index / chunkSize) % chunkSize
-            })
-            .Where(v => v.voxel.isActive)
+                for (int z = 0; z < chunkSize; z++)
+                {
+                    var voxel = voxels[x, y, z];
+                    if (voxel.isActive && voxel.type != Voxel.VoxelType.Air)
+                        activeVoxels.Add((voxel, x, y, z));
+                }
+            }
+        }
+        
+        var voxelsByType = activeVoxels
             .GroupBy(v => v.voxel.type)
             .ToList();
 
@@ -125,21 +132,38 @@ public class Chunk : MonoBehaviour
             submeshTriangles.Add(typeTriangles);
         }
 
+        // Destroy existing mesh to prevent memory leaks
+        if (meshFilter.sharedMesh != null)
+        {
+            if (Application.isPlaying)
+                Destroy(meshFilter.sharedMesh);
+            else
+                DestroyImmediate(meshFilter.sharedMesh);
+        }
+
         // Create and configure the mesh
         Mesh mesh = new Mesh
         {
+            name = $"ChunkMesh_{transform.position.x}_{transform.position.y}_{transform.position.z}",
             indexFormat = vertices.Count > 65000
                 ? UnityEngine.Rendering.IndexFormat.UInt32
                 : UnityEngine.Rendering.IndexFormat.UInt16,
-            subMeshCount = submeshTriangles.Count
+            subMeshCount = Mathf.Max(1, submeshTriangles.Count)
         };
 
         mesh.SetVertices(vertices);
         mesh.SetUVs(0, uvs);
 
         // Set submesh triangles for each voxel type
-        for (int i = 0; i < submeshTriangles.Count; i++)
-            mesh.SetTriangles(submeshTriangles[i], i, calculateBounds: false);
+        if (submeshTriangles.Count > 0)
+        {
+            for (int i = 0; i < submeshTriangles.Count; i++)
+                mesh.SetTriangles(submeshTriangles[i], i, calculateBounds: false);
+        }
+        else
+        {   // Empty mesh case - still need at least one submesh
+            mesh.SetTriangles(new int[0], 0, calculateBounds: false);
+        }
 
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
@@ -149,7 +173,12 @@ public class Chunk : MonoBehaviour
         meshCollider.sharedMesh = mesh;
 
         // Create materials array for each voxel type
-        SetupMaterialsForVoxelTypes(voxelsByType.Select(g => g.Key).ToArray());
+        if (voxelsByType.Count > 0)
+            SetupMaterialsForVoxelTypes(voxelsByType.Select(g => g.Key).ToArray());
+        else
+        {   // No active voxels - set empty material array
+            meshRenderer.materials = new Material[0];
+        }
     }
 
     void OnDestroy()
@@ -192,28 +221,61 @@ public class Chunk : MonoBehaviour
     private bool IsNeighborFaceVisible(int nx, int ny, int nz, Vector3Int dir, int x, int y, int z)
     {   // Check if a voxel face is visible, accounting for chunk boundaries
         if (nx < 0 || nx >= chunkSize || ny < 0 || ny >= chunkSize || nz < 0 || nz >= chunkSize)
-        {   // Handle faces at the edge of the chunk
-            Vector3 neighborWorldPos = transform.position + new Vector3(x, y, z) + new Vector3(dir.x, dir.y, dir.z);
+        {   // Handle faces at the edge of the chunk - check neighboring chunk
+            Vector3 neighborWorldPos = transform.position + new Vector3(nx, ny, nz);
             Chunk neighborChunk = World.Instance.GetChunk(neighborWorldPos);
 
             if (neighborChunk == null)
                 return true; // No neighbor chunk, show face
 
+            // Convert to neighbor chunk's local coordinates
             Vector3 localPos = neighborChunk.transform.InverseTransformPoint(neighborWorldPos);
-            return !neighborChunk.IsVoxelActiveAt(localPos);
+            int localX = Mathf.FloorToInt(localPos.x);
+            int localY = Mathf.FloorToInt(localPos.y);
+            int localZ = Mathf.FloorToInt(localPos.z);
+
+            // Handle wrapping coordinates at chunk boundaries
+            if (localX < 0) localX = chunkSize - 1;
+            else if (localX >= chunkSize) localX = 0;
+            
+            if (localY < 0) localY = chunkSize - 1;
+            else if (localY >= chunkSize) localY = 0;
+            
+            if (localZ < 0) localZ = chunkSize - 1;
+            else if (localZ >= chunkSize) localZ = 0;
+
+            // Check if neighbor voxel is solid
+            return !neighborChunk.IsVoxelActiveAt(localX, localY, localZ);
         }
 
-        return !voxels[nx, ny, nz].isActive;
+        // Neighbor is within this chunk - check if it's transparent
+        return !IsVoxelSolid(nx, ny, nz);
+    }
+
+    private bool IsVoxelSolid(int x, int y, int z)
+    {   // Check if voxel at coordinates is solid (active and not air)
+        if (x < 0 || x >= chunkSize || y < 0 || y >= chunkSize || z < 0 || z >= chunkSize)
+            return false;
+            
+        return voxels[x, y, z].isActive && voxels[x, y, z].type != Voxel.VoxelType.Air;
     }
 
     public bool IsVoxelActiveAt(Vector3 localPosition)
-    {   // Check if a voxel at a local position is active
-        int x = Mathf.RoundToInt(localPosition.x);
-        int y = Mathf.RoundToInt(localPosition.y);
-        int z = Mathf.RoundToInt(localPosition.z);
+    {   // Check if a voxel at a local position is active and not air
+        int x = Mathf.FloorToInt(localPosition.x);
+        int y = Mathf.FloorToInt(localPosition.y);
+        int z = Mathf.FloorToInt(localPosition.z);
 
         if (x >= 0 && x < chunkSize && y >= 0 && y < chunkSize && z >= 0 && z < chunkSize)
-            return voxels[x, y, z].isActive;
+            return voxels[x, y, z].isActive && voxels[x, y, z].type != Voxel.VoxelType.Air;
+
+        return false;
+    }
+
+    public bool IsVoxelActiveAt(int x, int y, int z)
+    {   // Check if a voxel at specific coordinates is active and not air
+        if (x >= 0 && x < chunkSize && y >= 0 && y < chunkSize && z >= 0 && z < chunkSize)
+            return voxels[x, y, z].isActive && voxels[x, y, z].type != Voxel.VoxelType.Air;
 
         return false;
     }
@@ -274,6 +336,14 @@ public class Chunk : MonoBehaviour
         }
     }
 
+    public Voxel GetVoxelAt(int x, int y, int z)
+    {   // Get voxel at specific coordinates
+        if (x >= 0 && x < chunkSize && y >= 0 && y < chunkSize && z >= 0 && z < chunkSize)
+            return voxels[x, y, z];
+        
+        return new Voxel(Vector3.zero, Color.clear, Voxel.VoxelType.Air, false);
+    }
+
     public void SetVoxelType(int x, int y, int z, Voxel.VoxelType newType)
     {   // Update voxel type at specific coordinates using VoxelTypeManager
         if (x >= 0 && x < chunkSize && y >= 0 && y < chunkSize && z >= 0 && z < chunkSize)
@@ -309,6 +379,12 @@ public class Chunk : MonoBehaviour
 
     private void SetupMaterialsForVoxelTypes(Voxel.VoxelType[] voxelTypes)
     {   // Create and assign materials for each voxel type submesh
+        if (World.Instance?.VoxelMaterial == null || voxelTypes.Length == 0)
+        {
+            meshRenderer.materials = new Material[0];
+            return;
+        }
+
         Material[] materials = new Material[voxelTypes.Length];
         
         for (int i = 0; i < voxelTypes.Length; i++)

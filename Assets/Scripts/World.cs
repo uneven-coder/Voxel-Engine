@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEditor;
 
@@ -11,6 +12,7 @@ public class World : MonoBehaviour
     // Use Vector3Int for chunk keys for better hashing and performance
     private Dictionary<Vector3Int, Chunk> chunks;
     private Dictionary<Vector3Int, Voxel[,,]> chunkVoxelData; // Store voxel data for persistence
+    private Dictionary<Vector3Int, Dictionary<Vector3Int, Voxel.VoxelType>> voxelChanges; // Store player modifications
     public static World Instance { get; private set; }
     public Material VoxelMaterial;
 
@@ -57,6 +59,7 @@ public class World : MonoBehaviour
     {   // Initialize world data structures and load initial chunks
         chunks = new Dictionary<Vector3Int, Chunk>(worldSize.x * worldSize.x * worldSize.y);
         chunkVoxelData = new Dictionary<Vector3Int, Voxel[,,]>(worldSize.x * worldSize.x * worldSize.y);
+        voxelChanges = new Dictionary<Vector3Int, Dictionary<Vector3Int, Voxel.VoxelType>>();
         cameraController = FindObjectOfType<CameraController>();
         
         GenerateInitialChunkData();
@@ -96,11 +99,22 @@ public class World : MonoBehaviour
             float wz = chunkWorldPos.z + z;
             Voxel.VoxelType baseType = DetermineVoxelType(wx, wy, wz);
 
-            // Apply random modifications to non-air voxels
+            // Apply layered coloring to non-air voxels based on depth
             if (baseType != Voxel.VoxelType.Air)
-                baseType = UnityEngine.Random.Range(0, 2) == 0 ? Voxel.VoxelType.Grass : Voxel.VoxelType.Stone;
+                baseType = DetermineLayeredVoxelType(wy, wx, wz);
 
             voxels[x, y, z] = VoxelTypeManager.CreateVoxel(new Vector3(x, y, z), baseType);
+        }
+
+        // Apply stored player changes
+        if (voxelChanges.ContainsKey(chunkCoord))
+        {   // Override with player-made modifications
+            foreach (var change in voxelChanges[chunkCoord])
+            {
+                Vector3Int pos = change.Key;
+                Voxel.VoxelType type = change.Value;
+                voxels[pos.x, pos.y, pos.z] = VoxelTypeManager.CreateVoxel(new Vector3(pos.x, pos.y, pos.z), type);
+            }
         }
 
         return voxels;
@@ -155,8 +169,10 @@ public class World : MonoBehaviour
 
 
     private HashSet<Vector3Int> GetActualVisibleChunks(Camera cam, Vector3Int cameraChunk, Vector3 cameraPos)
-    {   // Get only visible chunks using ray-based visibility detection
+    {   // Get visible chunks using frustum culling and simple distance check
         HashSet<Vector3Int> result = new HashSet<Vector3Int>();
+        float maxDistance = chunkSize * Mathf.Max(worldSize.x, worldSize.y) * 1.5f;
+        
         for (int x = 0; x < worldSize.x; x++)
         {
             for (int y = 0; y < worldSize.y; y++)
@@ -167,9 +183,11 @@ public class World : MonoBehaviour
                     Vector3 chunkCenter = ChunkCoordToWorldPos(chunkCoord) + Vector3.one * (chunkSize / 2f);
                     Bounds chunkBounds = new Bounds(chunkCenter, Vector3.one * chunkSize);
 
+                    // Use frustum culling and distance check instead of complex ray casting
                     if (GeometryUtility.TestPlanesAABB(cameraFrustumPlanes, chunkBounds))
                     {
-                        if (IsChunkVisibleByRay(cameraPos, chunkCoord, chunkCenter))
+                        float distanceToCamera = Vector3.Distance(cameraPos, chunkCenter);
+                        if (distanceToCamera <= maxDistance)
                             result.Add(chunkCoord);
                     }
                 }
@@ -320,4 +338,76 @@ public class World : MonoBehaviour
         return y <= terrainHeight ? Voxel.VoxelType.Grass : Voxel.VoxelType.Air;
     }
 
+    private Voxel.VoxelType DetermineLayeredVoxelType(float y, float x, float z)
+    {   // Create rectangular concentric layers from center to outside edges
+        Vector3 worldMin = GetWorldMin();
+        Vector3 worldMax = GetWorldMax();
+        Vector3 worldCenter = (worldMin + worldMax) / 2f;
+        Vector3 voxelPos = new Vector3(x, y, z);
+        
+        // Calculate distance to nearest edge in each dimension
+        float distanceToEdgeX = Mathf.Min(voxelPos.x - worldMin.x, worldMax.x - voxelPos.x);
+        float distanceToEdgeY = Mathf.Min(voxelPos.y - worldMin.y, worldMax.y - voxelPos.y);
+        float distanceToEdgeZ = Mathf.Min(voxelPos.z - worldMin.z, worldMax.z - voxelPos.z);
+        
+        // Use minimum distance to any edge to determine layer
+        float minDistanceToEdge = Mathf.Min(distanceToEdgeX, Mathf.Min(distanceToEdgeY, distanceToEdgeZ));
+        float maxPossibleDistance = GetMaxDistanceToCenter();
+        
+        // Calculate layer index based on distance from edge
+        int layerIndex = Mathf.FloorToInt((minDistanceToEdge / maxPossibleDistance) * GetVoxelTypeCount());
+        return GetVoxelTypeByLayer(layerIndex);
+    }
+
+    private Vector3 GetWorldMin() =>
+        new Vector3(worldOrigin.x, worldOrigin.y, worldOrigin.z);
+
+    private Vector3 GetWorldMax() =>
+        new Vector3(worldOrigin.x + worldSize.x * chunkSize, 
+                   worldOrigin.y + worldSize.y * chunkSize, 
+                   worldOrigin.z + worldSize.x * chunkSize);
+
+    private float GetMaxDistanceToCenter()
+    {   // Calculate maximum distance from center to any edge
+        float maxX = (worldSize.x * chunkSize) / 2f;
+        float maxY = (worldSize.y * chunkSize) / 2f;
+        float maxZ = (worldSize.x * chunkSize) / 2f;
+        return Mathf.Min(maxX, Mathf.Min(maxY, maxZ));
+    }
+
+    private int GetVoxelTypeCount() => 7;  // Total number of non-air voxel types
+
+    private Voxel.VoxelType GetVoxelTypeByLayer(int layerIndex)
+    {   // Return voxel type based on layer index from center outward
+        return layerIndex switch
+        {
+            0 => Voxel.VoxelType.Yellow,   // Center - brightest
+            1 => Voxel.VoxelType.Orange,   // Inner layer
+            2 => Voxel.VoxelType.Pink,     // Mid-inner layer
+            3 => Voxel.VoxelType.Purple,   // Middle layer
+            4 => Voxel.VoxelType.Cyan,     // Mid-outer layer
+            5 => Voxel.VoxelType.Stone,    // Outer layer
+            _ => Voxel.VoxelType.Grass     // Outermost layer
+        };
+    }
+
+    public void StoreVoxelChange(Chunk chunk, int x, int y, int z, Voxel.VoxelType newType)
+    {   // Store player-made voxel changes for persistence across chunk loading/unloading
+        Vector3Int chunkCoord = GetChunkCoordinateFromChunk(chunk);
+        Vector3Int voxelCoord = new Vector3Int(x, y, z);
+
+        if (!voxelChanges.ContainsKey(chunkCoord))
+            voxelChanges[chunkCoord] = new Dictionary<Vector3Int, Voxel.VoxelType>();
+
+        voxelChanges[chunkCoord][voxelCoord] = newType;
+
+        // Also update the stored chunk data
+        if (chunkVoxelData.ContainsKey(chunkCoord))
+            chunkVoxelData[chunkCoord][x, y, z] = VoxelTypeManager.CreateVoxel(new Vector3(x, y, z), newType);
+    }
+
+    private Vector3Int GetChunkCoordinateFromChunk(Chunk chunk)
+    {   // Find chunk coordinate from chunk instance
+        return chunks.FirstOrDefault(kvp => kvp.Value == chunk).Key;
+    }
 }

@@ -13,7 +13,12 @@ public struct Voxel
     {
         Air,
         Grass,
-        Stone
+        Stone,
+        Pink,
+        Orange,
+        Purple,
+        Cyan,
+        Yellow
     }
 
     public Voxel(Vector3 position, Color color, VoxelType type, bool isActive = true)
