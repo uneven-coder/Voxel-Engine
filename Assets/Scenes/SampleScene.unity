@@ -922,19 +922,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   interactionRange: 259.58
-  highlightColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  showHighlight: 1
-  destructionRate: 0.05
-  destructionRadius: 3
-  radiusHighlightColor: {r: 1, g: 0, b: 0, a: 1}
+  destructionRadius: 5
+  maxRadius: 15
   holdTimeToActivate: 0.4
-  maxRadius: 10
-  radiusGrowthTime: 0.8
-  destructionOverlayColor: {r: 1, g: 0, b: 0, a: 1}
-  preDestructionAlpha: 0.14
   voxelsPerFrameDestruction: 22
-  useMultiThreading: 1
-  maxConcurrentTasks: 4
+  batchSize: 8
 --- !u!1 &973227823
 GameObject:
   m_ObjectHideFlags: 0
@@ -965,7 +957,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f61aa23930fac984d9edb7aab3c3a416, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  chunkSize: 16
 --- !u!4 &973227825
 Transform:
   m_ObjectHideFlags: 0
@@ -993,9 +984,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad2122aebad3c8a4485a603f475a5274, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  worldSize: {x: 8, y: 3}
-  chunkSize: 12
+  worldSize: {x: 5, y: 2}
+  chunkSize: 16
   VoxelMaterial: {fileID: 2100000, guid: 4cab0bbaa182fa140a7fdf99cdce2f91, type: 2}
+  VoxelComputeShader: {fileID: 7200000, guid: e26d8880b8c98e44dbcf8c6350c927ec, type: 3}
   noiseSeed: 12
   maxHeight: 1111
   noiseScale: 0.0001

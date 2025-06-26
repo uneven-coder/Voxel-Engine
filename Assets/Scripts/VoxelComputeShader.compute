@@ -66,21 +66,15 @@ static const float2 faceUVs[4] =
     float2(0,0), float2(1,0), float2(1,1), float2(0,1)
 };
 
-bool IsVoxelActive(int3 coords)
-{   // Check if voxel at coordinates is active within chunk bounds
+// Helper: Check if voxel is active in this chunk
+bool IsVoxelActiveInChunk(int3 coords)
+{   // Returns true if in bounds and active
     if (coords.x < 0 || coords.x >= chunkSize || 
         coords.y < 0 || coords.y >= chunkSize || 
         coords.z < 0 || coords.z >= chunkSize)
         return false;
-        
     int index = coords.x + coords.y * chunkSize + coords.z * chunkSize * chunkSize;
     return voxelBuffer[index].isActive > 0 && voxelBuffer[index].type > 0;
-}
-
-bool IsFaceVisible(int3 voxelCoords, int faceIndex)
-{   // Check if a face should be rendered based on neighbor transparency
-    int3 neighborCoords = voxelCoords + directions[faceIndex];
-    return !IsVoxelActive(neighborCoords);
 }
 
 [numthreads(8,8,1)]
@@ -88,45 +82,60 @@ void FaceCulling(uint3 id : SV_DispatchThreadID)
 {   // Process face culling for each voxel in parallel
     if (id.x >= chunkSize || id.y >= chunkSize)
         return;
-        
     for (int z = 0; z < chunkSize; z++)
     {   // Process each voxel in this thread's column
         int3 voxelCoords = int3(id.x, id.y, z);
         int voxelIndex = voxelCoords.x + voxelCoords.y * chunkSize + voxelCoords.z * chunkSize * chunkSize;
-        
-        if (!IsVoxelActive(voxelCoords))
+        if (voxelBuffer[voxelIndex].isActive == 0 || voxelBuffer[voxelIndex].type == 0)
         {   // Mark all faces as invisible for inactive voxels
             for (int face = 0; face < 6; face++)
             {
                 int faceIndex = voxelIndex * 6 + face;
                 visibilityBuffer[faceIndex] = 0;
+                FaceData faceData;
+                [unroll]
+                for (int v = 0; v < 4; v++)
+                {
+                    faceData.vertices[v] = 0;
+                    faceData.uvs[v] = 0;
+                }
+                faceData.materialIndex = 0;
+                faceData.isVisible = 0;
+                faceBuffer[faceIndex] = faceData;
             }
             continue;
         }
-        
-        // Check visibility for each face
         for (int face = 0; face < 6; face++)
         {   // Determine visibility based on neighbor occupancy
             int faceIndex = voxelIndex * 6 + face;
-            visibilityBuffer[faceIndex] = IsFaceVisible(voxelCoords, face) ? 1 : 0;
-            
-            if (visibilityBuffer[faceIndex] > 0)
-            {   // Generate face data for visible faces
+            int3 neighborCoords = voxelCoords + directions[face];
+            bool neighborActive = IsVoxelActiveInChunk(neighborCoords);
+            bool visible = !neighborActive;
+            if (visible)
+            {
+                visibilityBuffer[faceIndex] = 1;
                 FaceData faceData;
-                faceData.isVisible = 1;
-                faceData.materialIndex = voxelBuffer[voxelIndex].type;
-                
+                [unroll]
                 for (int v = 0; v < 4; v++)
-                {   // Calculate world vertices for face
+                {
                     faceData.vertices[v] = voxelBuffer[voxelIndex].position + faceVertices[face][v];
                     faceData.uvs[v] = faceUVs[v];
                 }
-                
+                faceData.materialIndex = voxelBuffer[voxelIndex].type;
+                faceData.isVisible = 1;
                 faceBuffer[faceIndex] = faceData;
             }
             else
-            {   // Mark face as invisible
+            {
+                visibilityBuffer[faceIndex] = 0;
                 FaceData faceData;
+                [unroll]
+                for (int v = 0; v < 4; v++)
+                {
+                    faceData.vertices[v] = 0;
+                    faceData.uvs[v] = 0;
+                }
+                faceData.materialIndex = 0;
                 faceData.isVisible = 0;
                 faceBuffer[faceIndex] = faceData;
             }
