@@ -9,6 +9,7 @@ public class Chunk : MonoBehaviour
 {
     private Voxel[,,] voxels;
     [SerializeField] private int chunkSize = 16;
+    [SerializeField] private ComputeShader voxelComputeShader;
 
     // Use pooled lists to reduce allocations
     private static readonly Stack<List<Vector3>> verticesPool = new Stack<List<Vector3>>();
@@ -18,6 +19,9 @@ public class Chunk : MonoBehaviour
     private List<Vector3> vertices;
     private List<int> triangles;
     private List<Vector2> uvs;
+    
+    // Compute shader data
+    private bool useComputeShader = true;
 
     private MeshFilter meshFilter;
     private MeshRenderer meshRenderer;
@@ -60,6 +64,12 @@ public class Chunk : MonoBehaviour
         vertices = verticesPool.Count > 0 ? verticesPool.Pop() : new List<Vector3>(4096);
         triangles = trianglesPool.Count > 0 ? trianglesPool.Pop() : new List<int>(4096);
         uvs = uvsPool.Count > 0 ? uvsPool.Pop() : new List<Vector2>(4096);
+
+        // Initialize compute shader if available
+        if (voxelComputeShader != null && useComputeShader)
+        {   // Setup compute shader for this chunk - placeholder for future implementation
+            Debug.Log("Compute shader voxel processing will be implemented");
+        }
 
         // Mark chunk as static for Unity's static batching to reduce draw calls
         gameObject.isStatic = true;
@@ -395,4 +405,34 @@ public class Chunk : MonoBehaviour
         
         meshRenderer.materials = materials;
     }
+
+    public void DestroyVoxelsWithComputeShader(Vector3 destructionCenter, int destructionRadius, int[] voxelIndices)
+    {   // Use compute shader for fast batch voxel destruction when available
+        if (voxelIndices == null || voxelIndices.Length == 0)
+            return;
+
+        // For now, fall back to traditional destruction until compute shader is fully implemented
+        foreach (int index in voxelIndices)
+        {   // Convert 1D index to 3D coordinates
+            int x = index % chunkSize;
+            int y = (index / (chunkSize * chunkSize)) % chunkSize;
+            int z = (index / chunkSize) % chunkSize;
+            
+            if (IsWithinBounds(x, y, z))
+            {   // Destroy voxel at calculated coordinates
+                var voxel = voxels[x, y, z];
+                if (voxel.isActive && voxel.type != Voxel.VoxelType.Air)
+                {   // Convert to air type
+                    SetVoxelType(x, y, z, Voxel.VoxelType.Air);
+                    World.Instance.StoreVoxelChange(this, x, y, z, Voxel.VoxelType.Air);
+                }
+            }
+        }
+        
+        // Regenerate mesh after batch destruction
+        GenerateMesh();
+    }
+
+    private bool IsWithinBounds(int x, int y, int z) =>
+        x >= 0 && x < chunkSize && y >= 0 && y < chunkSize && z >= 0 && z < chunkSize;
 }

@@ -15,6 +15,7 @@ public class World : MonoBehaviour
     private Dictionary<Vector3Int, Dictionary<Vector3Int, Voxel.VoxelType>> voxelChanges; // Store player modifications
     public static World Instance { get; private set; }
     public Material VoxelMaterial;
+    public ComputeShader VoxelComputeShader;
 
     // noise
     public int noiseSeed = 1234;
@@ -61,6 +62,13 @@ public class World : MonoBehaviour
         chunkVoxelData = new Dictionary<Vector3Int, Voxel[,,]>(worldSize.x * worldSize.x * worldSize.y);
         voxelChanges = new Dictionary<Vector3Int, Dictionary<Vector3Int, Voxel.VoxelType>>();
         cameraController = FindObjectOfType<CameraController>();
+        
+        // Initialize compute shader manager if available
+        if (VoxelComputeShader != null)
+        {   // Setup compute shader system for enhanced voxel processing
+            ComputeShaderVoxelManager.Initialize(VoxelComputeShader);
+            Debug.Log("Compute shader system initialized for voxel processing");
+        }
         
         GenerateInitialChunkData();
         LoadAllChunks();

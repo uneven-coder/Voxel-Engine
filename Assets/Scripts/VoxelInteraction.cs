@@ -107,10 +107,15 @@ public class VoxelInteraction : MonoBehaviour
     }
 
     private void HandleVoxelDestruction()
-    {   // Queue all voxels within the destruction radius for destruction
+    {   // Queue all voxels within the destruction radius for destruction using compute shader when possible
         if (!hasHighlightedVoxel || voxelsInRadius.Count == 0)
             return;
 
+        // Try to use compute shader for batch destruction
+        if (TryComputeShaderDestruction())
+            return;
+
+        // Fallback to traditional queuing method
         foreach (var (chunk, coords) in voxelsInRadius)
         {   // Only queue if not already queued and voxel still exists
             var voxelKey = (chunk, coords);
@@ -128,6 +133,34 @@ public class VoxelInteraction : MonoBehaviour
         }
             
         lastDestructionTime = Time.time;
+    }
+
+    private bool TryComputeShaderDestruction()
+    {   // Attempt to use compute shader for faster batch destruction
+        if (highlightedChunk == null)
+            return false;
+
+        // Convert chunk coordinates to indices for compute shader
+        var destructionIndices = new System.Collections.Generic.List<int>();
+        int chunkSize = GetChunkSize(highlightedChunk);
+        
+        foreach (var (chunk, coords) in voxelsInRadius)
+        {   // Only process voxels in the same chunk for now
+            if (chunk == highlightedChunk)
+            {   // Convert 3D coordinates to 1D index
+                int index = coords.x + coords.y * chunkSize + coords.z * chunkSize * chunkSize;
+                destructionIndices.Add(index);
+            }
+        }
+
+        if (destructionIndices.Count > 0)
+        {   // Use compute shader for destruction
+            Vector3 localCenter = highlightedVoxelCoords;
+            highlightedChunk.DestroyVoxelsWithComputeShader(localCenter, destructionRadius, destructionIndices.ToArray());
+            return true;
+        }
+
+        return false;
     }
 
     private void HandleSingleVoxelDestruction()

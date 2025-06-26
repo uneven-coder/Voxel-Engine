@@ -1,0 +1,185 @@
+#pragma kernel FaceCulling
+#pragma kernel VoxelDestruction
+#pragma kernel MeshGeneration
+
+// Voxel data structure
+struct VoxelData
+{
+    float3 position;
+    float4 color;
+    int type;
+    int isActive;
+};
+
+// Face data structure for mesh generation
+struct FaceData
+{
+    float3 vertices[4];
+    float2 uvs[4];
+    int materialIndex;
+    int isVisible;
+};
+
+// Buffers
+RWStructuredBuffer<VoxelData> voxelBuffer;
+RWStructuredBuffer<FaceData> faceBuffer;
+RWStructuredBuffer<int> destructionBuffer;
+RWStructuredBuffer<int> visibilityBuffer;
+RWStructuredBuffer<int> faceCountBuffer;
+
+// Constants
+int chunkSize;
+int destructionRadius;
+float3 destructionCenter;
+int destructionCount;
+float3 cameraPosition;
+float3 cameraForward;
+float cameraFOV;
+
+// Direction vectors for face checking
+static const int3 directions[6] = 
+{
+    int3(-1, 0, 0), int3(1, 0, 0),
+    int3(0, -1, 0), int3(0, 1, 0),
+    int3(0, 0, -1), int3(0, 0, 1)
+};
+
+// Face vertices relative to voxel position
+static const float3 faceVertices[6][4] = 
+{
+    // -X face
+    { float3(0,0,0), float3(0,0,1), float3(0,1,1), float3(0,1,0) },
+    // +X face  
+    { float3(1,0,0), float3(1,1,0), float3(1,1,1), float3(1,0,1) },
+    // -Y face
+    { float3(0,0,0), float3(1,0,0), float3(1,0,1), float3(0,0,1) },
+    // +Y face
+    { float3(0,1,0), float3(0,1,1), float3(1,1,1), float3(1,1,0) },
+    // -Z face
+    { float3(0,0,0), float3(0,1,0), float3(1,1,0), float3(1,0,0) },
+    // +Z face
+    { float3(0,0,1), float3(1,0,1), float3(1,1,1), float3(0,1,1) }
+};
+
+static const float2 faceUVs[4] = 
+{
+    float2(0,0), float2(1,0), float2(1,1), float2(0,1)
+};
+
+bool IsVoxelActive(int3 coords)
+{   // Check if voxel at coordinates is active within chunk bounds
+    if (coords.x < 0 || coords.x >= chunkSize || 
+        coords.y < 0 || coords.y >= chunkSize || 
+        coords.z < 0 || coords.z >= chunkSize)
+        return false;
+        
+    int index = coords.x + coords.y * chunkSize + coords.z * chunkSize * chunkSize;
+    return voxelBuffer[index].isActive > 0 && voxelBuffer[index].type > 0;
+}
+
+bool IsFaceVisible(int3 voxelCoords, int faceIndex)
+{   // Check if a face should be rendered based on neighbor transparency
+    int3 neighborCoords = voxelCoords + directions[faceIndex];
+    return !IsVoxelActive(neighborCoords);
+}
+
+[numthreads(8,8,1)]
+void FaceCulling(uint3 id : SV_DispatchThreadID)
+{   // Process face culling for each voxel in parallel
+    if (id.x >= chunkSize || id.y >= chunkSize)
+        return;
+        
+    for (int z = 0; z < chunkSize; z++)
+    {   // Process each voxel in this thread's column
+        int3 voxelCoords = int3(id.x, id.y, z);
+        int voxelIndex = voxelCoords.x + voxelCoords.y * chunkSize + voxelCoords.z * chunkSize * chunkSize;
+        
+        if (!IsVoxelActive(voxelCoords))
+        {   // Mark all faces as invisible for inactive voxels
+            for (int face = 0; face < 6; face++)
+            {
+                int faceIndex = voxelIndex * 6 + face;
+                visibilityBuffer[faceIndex] = 0;
+            }
+            continue;
+        }
+        
+        // Check visibility for each face
+        for (int face = 0; face < 6; face++)
+        {   // Determine visibility based on neighbor occupancy
+            int faceIndex = voxelIndex * 6 + face;
+            visibilityBuffer[faceIndex] = IsFaceVisible(voxelCoords, face) ? 1 : 0;
+            
+            if (visibilityBuffer[faceIndex] > 0)
+            {   // Generate face data for visible faces
+                FaceData faceData;
+                faceData.isVisible = 1;
+                faceData.materialIndex = voxelBuffer[voxelIndex].type;
+                
+                for (int v = 0; v < 4; v++)
+                {   // Calculate world vertices for face
+                    faceData.vertices[v] = voxelBuffer[voxelIndex].position + faceVertices[face][v];
+                    faceData.uvs[v] = faceUVs[v];
+                }
+                
+                faceBuffer[faceIndex] = faceData;
+            }
+            else
+            {   // Mark face as invisible
+                FaceData faceData;
+                faceData.isVisible = 0;
+                faceBuffer[faceIndex] = faceData;
+            }
+        }
+    }
+}
+
+[numthreads(64,1,1)]
+void VoxelDestruction(uint3 id : SV_DispatchThreadID)
+{   // Process voxel destruction in parallel using spherical radius
+    if (id.x >= destructionCount)
+        return;
+        
+    int destructionIndex = destructionBuffer[id.x];
+    
+    // Convert 1D index to 3D coordinates
+    int z = destructionIndex / (chunkSize * chunkSize);
+    int y = (destructionIndex - z * chunkSize * chunkSize) / chunkSize;
+    int x = destructionIndex - z * chunkSize * chunkSize - y * chunkSize;
+    
+    float3 voxelPos = float3(x, y, z);
+    float distance = length(voxelPos - destructionCenter);
+    
+    if (distance <= destructionRadius)
+    {   // Destroy voxel by setting it to air type
+        voxelBuffer[destructionIndex].type = 0; // Air type
+        voxelBuffer[destructionIndex].isActive = 0;
+        voxelBuffer[destructionIndex].color = float4(0, 0, 0, 0);
+    }
+}
+
+[numthreads(8,8,1)]
+void MeshGeneration(uint3 id : SV_DispatchThreadID)
+{   // Generate optimized mesh data using face visibility results
+    if (id.x >= chunkSize || id.y >= chunkSize)
+        return;
+        
+    int faceCount = 0;
+    
+    for (int z = 0; z < chunkSize; z++)
+    {   // Count visible faces for mesh optimization
+        int3 voxelCoords = int3(id.x, id.y, z);
+        int voxelIndex = voxelCoords.x + voxelCoords.y * chunkSize + voxelCoords.z * chunkSize * chunkSize;
+        
+        for (int face = 0; face < 6; face++)
+        {   // Add to face count if visible
+            int faceIndex = voxelIndex * 6 + face;
+            if (visibilityBuffer[faceIndex] > 0)
+                faceCount++;
+        }
+    }
+    
+    // Store face count for this thread's column
+    int columnIndex = id.x + id.y * chunkSize;
+    faceCountBuffer[columnIndex] = faceCount;
+}
